@@ -15,7 +15,6 @@
 // Our demonstrations of various EVE functions
 #include "demos.h"
 
-//===========================================================================
 void setup()
 {
 #if (DEBUG_LEVEL != DEBUG_NONE)
