@@ -3,6 +3,7 @@
 #include <stdarg.h>
 // Definitions for our circuit board and display.
 #include "CFA10100_defines.h"
+#include <ESP32-TWAI-CAN.hpp>
 
 #if BUILD_SD
 #include <SD.h>
@@ -14,6 +15,11 @@
 
 // Our demonstrations of various EVE functions
 #include "demos.h"
+
+#define CAN_TX 5
+#define CAN_RX 4
+
+CanFrame rxFrame;
 
 void setup()
 {
@@ -47,11 +53,36 @@ void setup()
   // Optional pin used for LED or oscilloscope debugging.
   pinMode(DEBUG_LED, OUTPUT);
 
+  ESP32Can.setPins(CAN_TX, CAN_RX);
+  ESP32Can.setRxQueueSize(5);
+  ESP32Can.setTxQueueSize(5);
+  ESP32Can.setSpeed(ESP32Can.convertSpeed(500));
+
   // Initialize SPI
   SPI.begin(18, 13, 11, 15); // SCK, MISO, MOSI, CS
   // Bump the clock to 8MHz. Appears to be the maximum.
   SPI.beginTransaction(SPISettings(8000000, MSBFIRST, SPI_MODE0));
   DBG_GEEK("SPI initialzed to: 8MHz\n");
+
+  if (ESP32Can.begin())
+  {
+    DBG_GEEK("CAN bus started!");
+  }
+  else
+  {
+    DBG_GEEK("CAN bus failed!");
+  }
+
+  // or override everything in one command;
+  // It is also safe to use .begin() without .end() as it calls it internally
+  if (ESP32Can.begin(ESP32Can.convertSpeed(500), CAN_TX, CAN_RX, 10, 10))
+  {
+    DBG_GEEK("CAN bus started!");
+  }
+  else
+  {
+    DBG_GEEK("CAN bus failed!");
+  }
 
   // See if we can find the FTDI/BridgeTek EVE processor
   if (0 != EVE_Initialize())
@@ -109,6 +140,16 @@ float moduleData[5][2][21] = {
 void loop()
 {
   DBG_GEEK("Loop initialization.\n");
+
+  if (ESP32Can.readFrame(rxFrame, 1000))
+  {
+    // Comment out if too many frames
+    DBG_GEEK("Received frame: %03X  \r\n", rxFrame.identifier);
+    if (rxFrame.identifier == 0x7E8)
+    {                                                               
+      DBG_GEEK("Success: %d\r\n", rxFrame.data[0]);
+    }
+  }
 
   // Get the current write pointer from the EVE
   uint16_t FWo;
