@@ -4,6 +4,8 @@
 // Definitions for our circuit board and display.
 #include "CFA10100_defines.h"
 #include <ESP32-TWAI-CAN.hpp>
+#include "Data.h"
+#include "CAN_data.h"
 
 #if BUILD_SD
 #include <SD.h>
@@ -23,10 +25,17 @@ CanFrame rxFrame;
 
 void setup()
 {
-#if (DEBUG_LEVEL != DEBUG_NONE)
-  // Initialize UART for debugging messages
+  // #if (DEBUG_LEVEL != DEBUG_NONE)
+  //   // Initialize UART for debugging messages
+  //   Serial.begin(115200);
+  //   delay(1000);
+  //   Serial.println("Serial working!");
+  // #endif // (DEBUG_LEVEL != DEBUG_NONE)
+
+  
   Serial.begin(115200);
-#endif // (DEBUG_LEVEL != DEBUG_NONE)
+  delay(5000);  
+  //Serial.println("Serial working!");
   DBG_STAT("Begin\n");
 
   // Configure GPIO for EVE_CS_NOT
@@ -41,61 +50,70 @@ void setup()
   gpio_set_level(EVE_PD_NOT, 1); // Default to high (power on)
   delay(10);
 
-  // Initialize port directions
-  //  EVE interrupt output (not used in this example)
+  //Initialize port directions
+  // EVE interrupt output (not used in this example)
   pinMode(EVE_INT, INPUT_PULLUP);
   // EVE Power Down (reset) input
   pinMode(EVE_PD_NOT, OUTPUT);
   // EVE SPI bus CS# input
   pinMode(EVE_CS_NOT, OUTPUT);
   // USD card CS
-  // pinMode(SD_CS, OUTPUT);
+  //pinMode(SD_CS, OUTPUT);
   // Optional pin used for LED or oscilloscope debugging.
   pinMode(DEBUG_LED, OUTPUT);
 
-  ESP32Can.setPins(CAN_TX, CAN_RX);
-  ESP32Can.setRxQueueSize(5);
-  ESP32Can.setTxQueueSize(5);
-  ESP32Can.setSpeed(ESP32Can.convertSpeed(500));
-
   // Initialize SPI
-  SPI.begin(18, 13, 11, 15); // SCK, MISO, MOSI, CS
-  // Bump the clock to 8MHz. Appears to be the maximum.
+  SPI.begin(18,13,11,15); // SCK, MISO, MOSI, CS
+  //SPI.begin(18, 13, 11, 15); // SCK, MISO, MOSI, CS
+
+  //Bump the clock to 8MHz. Appears to be the maximum.
   SPI.beginTransaction(SPISettings(8000000, MSBFIRST, SPI_MODE0));
   DBG_GEEK("SPI initialzed to: 8MHz\n");
 
-  if (ESP32Can.begin())
-  {
-    DBG_GEEK("CAN bus started!");
-  }
+  //See if we can find the FTDI/BridgeTek EVE processor
+  if(0 != EVE_Initialize())
+    {
+    DBG_STAT("Failed to initialize %s8%02X. Stopping.\n",EVE_DEVICE<0x14?"FT":"BT",EVE_DEVICE);
+    while(1);
+    }
   else
-  {
-    DBG_GEEK("CAN bus failed!");
+    {
+    DBG_STAT("%s8%02X initialized.\n",EVE_DEVICE<0x14?"FT":"BT",EVE_DEVICE);
+    }
+  
+    
+  setup_can();
+
+  canQueue = xQueueCreate(32, sizeof(twai_message_t));
+  if (canQueue == NULL) {
+      Serial.println("Failed to create CAN queue!");
   }
 
-  // or override everything in one command;
-  // It is also safe to use .begin() without .end() as it calls it internally
-  if (ESP32Can.begin(ESP32Can.convertSpeed(500), CAN_TX, CAN_RX, 10, 10))
-  {
-    DBG_GEEK("CAN bus started!");
-  }
-  else
-  {
-    DBG_GEEK("CAN bus failed!");
-  }
+  xTaskCreatePinnedToCore(can_receiver_task, "CAN_RX", 4096, NULL, 2, NULL, 0);
+  xTaskCreatePinnedToCore(can_parser_task, "CAN_Parser", 4096, NULL, 1, NULL, 1);
 
-  // See if we can find the FTDI/BridgeTek EVE processor
-  if (0 != EVE_Initialize())
-  {
-    DBG_STAT("Failed to initialize %s8%02X. Stopping.\n", EVE_DEVICE < 0x14 ? "FT" : "BT", EVE_DEVICE);
-    while (1)
-      ;
-  }
-  else
-  {
-    DBG_STAT("%s8%02X initialized.\n", EVE_DEVICE < 0x14 ? "FT" : "BT", EVE_DEVICE);
-  }
-} //  setup()
+} 
+
+void can_receiver_task(void* pvParameters) {
+    twai_message_t message;
+    while (true) {
+        if (twai_receive(&message, 0) == ESP_OK) {
+            xQueueSend(canQueue, &message, 0);  // drop if full
+        }
+        vTaskDelay(1);
+    }
+}
+
+void can_parser_task(void* pvParameters) {
+    twai_message_t message;
+    while (true) {
+        while (xQueueReceive(canQueue, &message, 0) == pdTRUE) {
+            parse_can_message(&message);
+        }
+        vTaskDelay(1);  // Small yield between bursts
+    }
+}
+
 
 uint8_t screen = 0;
 
@@ -110,46 +128,36 @@ void homeScreen();
 void setScreen(int8_t num);
 uint16_t header(uint16_t FWo, int16_t x_point, int16_t y_point, bool home, char *title);
 
-float moduleData[5][2][21] = {
-    // Module 1: temperatures, voltages
-    {
-        {42.3, 18.7, 56.2, 35.8, 47.1, 28.9, 54.6, 31.2, 49.8, 25.4, 38.9, 41.0, 52.1, 34.7, 28.5, 29.4, 39.1, 47.8, 51.0, 23.5, 50.2}, // Temperatures
-        {3.54, 1.56, 4.69, 2.98, 3.92, 2.11, 4.05, 3.33, 3.11, 3.72, 4.06, 2.99, 4.12, 3.68, 3.48, 3.74, 2.99, 4.00, 3.91, 3.02, 3.87}  // Voltages
-    },
-    // Module 2: temperatures, voltages
-    {
-        {22.9, 60.4, 28.5, 39.2, 51.7, 44.3, 32.8, 45.0, 37.1, 40.2, 55.4, 29.5, 33.1, 41.9, 49.3, 42.8, 40.0, 35.2, 37.7, 52.9, 45.3}, // Temperatures
-        {1.91, 5.00, 2.38, 3.27, 4.31, 3.76, 2.84, 3.89, 2.59, 4.13, 3.95, 2.68, 3.11, 3.90, 4.24, 3.42, 3.08, 4.05, 4.01, 2.96, 3.65}  // Voltages
-    },
-    // Module 3: temperatures, voltages
-    {
-        {19.8, 64.3, 30.1, 45.6, 33.9, 41.2, 38.5, 44.1, 39.6, 49.8, 29.7, 33.5, 43.3, 46.8, 50.0, 32.1, 40.6, 34.9, 45.5, 47.9, 28.3}, // Temperatures
-        {1.65, 4.36, 2.51, 3.80, 2.83, 4.12, 1.98, 3.23, 3.05, 2.79, 3.32, 3.20, 4.15, 4.05, 3.58, 3.39, 3.88, 3.43, 3.94, 3.68, 2.79}  // Voltages
-    },
-    // Module 4: temperatures, voltages
-    {
-        {25.4, 41.5, 59.2, 21.6, 48.3, 38.9, 45.2, 44.0, 40.3, 37.8, 49.0, 32.6, 36.5, 42.7, 30.8, 45.3, 41.4, 48.7, 32.3, 40.5, 35.2}, // Temperatures
-        {2.17, 3.75, 4.13, 3.27, 3.94, 3.11, 2.98, 4.12, 3.28, 4.01, 3.68, 3.54, 3.77, 4.10, 3.81, 4.05, 3.42, 3.69, 2.97, 3.61, 3.80}  // Voltages
-    },
-    // Module 5: temperatures, voltages
-    {
-        {30.4, 50.2, 43.5, 32.8, 36.7, 41.1, 46.9, 49.8, 51.4, 40.6, 45.5, 30.1, 39.3, 47.6, 38.3, 42.2, 40.7, 49.0, 37.4, 34.8, 51.2}, // Temperatures
-        {3.48, 3.25, 2.91, 3.67, 4.01, 3.81, 3.47, 3.62, 3.87, 3.68, 3.55, 3.98, 4.02, 3.71, 4.08, 4.10, 3.72, 3.88, 3.99, 3.67, 3.88}  // Voltages
-    }};
+// float moduleData[5][2][21] = {
+//     // Module 1: temperatures, voltages
+//     {
+//         {42.3, 18.7, 56.2, 35.8, 47.1, 28.9, 54.6, 31.2, 49.8, 25.4, 38.9, 41.0, 52.1, 34.7, 28.5, 29.4, 39.1, 47.8, 51.0, 23.5, 50.2}, // Temperatures
+//         {3.54, 1.56, 4.69, 2.98, 3.92, 2.11, 4.05, 3.33, 3.11, 3.72, 4.06, 2.99, 4.12, 3.68, 3.48, 3.74, 2.99, 4.00, 3.91, 3.02, 3.87}  // Voltages
+//     },
+//     // Module 2: temperatures, voltages
+//     {
+//         {22.9, 60.4, 28.5, 39.2, 51.7, 44.3, 32.8, 45.0, 37.1, 40.2, 55.4, 29.5, 33.1, 41.9, 49.3, 42.8, 40.0, 35.2, 37.7, 52.9, 45.3}, // Temperatures
+//         {1.91, 5.00, 2.38, 3.27, 4.31, 3.76, 2.84, 3.89, 2.59, 4.13, 3.95, 2.68, 3.11, 3.90, 4.24, 3.42, 3.08, 4.05, 4.01, 2.96, 3.65}  // Voltages
+//     },
+//     // Module 3: temperatures, voltages
+//     {
+//         {19.8, 64.3, 30.1, 45.6, 33.9, 41.2, 38.5, 44.1, 39.6, 49.8, 29.7, 33.5, 43.3, 46.8, 50.0, 32.1, 40.6, 34.9, 45.5, 47.9, 28.3}, // Temperatures
+//         {1.65, 4.36, 2.51, 3.80, 2.83, 4.12, 1.98, 3.23, 3.05, 2.79, 3.32, 3.20, 4.15, 4.05, 3.58, 3.39, 3.88, 3.43, 3.94, 3.68, 2.79}  // Voltages
+//     },
+//     // Module 4: temperatures, voltages
+//     {
+//         {25.4, 41.5, 59.2, 21.6, 48.3, 38.9, 45.2, 44.0, 40.3, 37.8, 49.0, 32.6, 36.5, 42.7, 30.8, 45.3, 41.4, 48.7, 32.3, 40.5, 35.2}, // Temperatures
+//         {2.17, 3.75, 4.13, 3.27, 3.94, 3.11, 2.98, 4.12, 3.28, 4.01, 3.68, 3.54, 3.77, 4.10, 3.81, 4.05, 3.42, 3.69, 2.97, 3.61, 3.80}  // Voltages
+//     },
+//     // Module 5: temperatures, voltages
+//     {
+//         {30.4, 50.2, 43.5, 32.8, 36.7, 41.1, 46.9, 49.8, 51.4, 40.6, 45.5, 30.1, 39.3, 47.6, 38.3, 42.2, 40.7, 49.0, 37.4, 34.8, 51.2}, // Temperatures
+//         {3.48, 3.25, 2.91, 3.67, 4.01, 3.81, 3.47, 3.62, 3.87, 3.68, 3.55, 3.98, 4.02, 3.71, 4.08, 4.10, 3.72, 3.88, 3.99, 3.67, 3.88}  // Voltages
+//     }};
 
 void loop()
 {
   DBG_GEEK("Loop initialization.\n");
-
-  if (ESP32Can.readFrame(rxFrame, 1000))
-  {
-    // Comment out if too many frames
-    DBG_GEEK("Received frame: %03X  \r\n", rxFrame.identifier);
-    if (rxFrame.identifier == 0x7E8)
-    {                                                               
-      DBG_GEEK("Success: %d\r\n", rxFrame.data[0]);
-    }
-  }
 
   // Get the current write pointer from the EVE
   uint16_t FWo;
@@ -348,21 +356,46 @@ uint16_t Button(uint16_t FWo, int16_t x0, int16_t y0, int16_t x1, int16_t y1, ch
   return (FWo);
 }
 
+// uint16_t temperatureGradient(uint16_t FWo, int16_t x_point, int16_t y_point, int8_t num, int8_t modNum)
+// {
+//   FWo = header(FWo, x_point, y_point, false, "Mod. Temp");
+
+//   int tempCounter = 1;
+
+//   for (int i = 0; i < 3; i++)
+//   {
+//     for (int j = 0; j < 7; j++)
+//     {
+//       FWo = tempGridBox(FWo, j * (LCD_WIDTH / 7),
+//                         i * (LCD_HEIGHT / 4) + (LCD_HEIGHT / 4),
+//                         j * (LCD_WIDTH / 7) + (LCD_WIDTH / 7),
+//                         i * (LCD_HEIGHT / 4) + 2 * (LCD_HEIGHT / 4),
+//                         tempCounter, moduleData[modNum - 1][0][tempCounter],
+//                         EVE_ENC_COLOR_RGB(255, 0, 0));
+//       tempCounter++;
+//     }
+//   }
+
+//   return (FWo);
+// }
+
 uint16_t temperatureGradient(uint16_t FWo, int16_t x_point, int16_t y_point, int8_t num, int8_t modNum)
 {
   FWo = header(FWo, x_point, y_point, false, "Mod. Temp");
 
-  int tempCounter = 1;
+  int tempCounter = 0;
 
-  for (int i = 0; i < 3; i++)
-  {
-    for (int j = 0; j < 7; j++)
-    {
+  for (int i = 0; i < 3; i++) {
+    for (int j = 0; j < 7; j++) {
+      if (tempCounter >= 18) break; // only show valid thermistors
+
+      float value = Data::getCellTemp(modNum - 1, tempCounter);
       FWo = tempGridBox(FWo, j * (LCD_WIDTH / 7),
                         i * (LCD_HEIGHT / 4) + (LCD_HEIGHT / 4),
                         j * (LCD_WIDTH / 7) + (LCD_WIDTH / 7),
                         i * (LCD_HEIGHT / 4) + 2 * (LCD_HEIGHT / 4),
-                        tempCounter, moduleData[modNum - 1][0][tempCounter],
+                        tempCounter + 1,
+                        value,
                         EVE_ENC_COLOR_RGB(255, 0, 0));
       tempCounter++;
     }
@@ -375,29 +408,56 @@ uint16_t voltageGradient(uint16_t FWo, int16_t x_point, int16_t y_point, int8_t 
 {
   FWo = header(FWo, x_point, y_point, false, "Mod. Volt");
 
-  int voltCounter = 1;
+  int voltCounter = 0;
 
-  float voltages[3][7] = {
-      {3.54, 1.56, 4.69, 2.98, 3.92, 2.11, 4.05},
-      {1.91, 5.00, 2.38, 3.27, 4.31, 3.76, 2.84},
-      {1.65, 4.36, 2.51, 3.80, 2.83, 4.12, 1.98}};
+  for (int i = 0; i < 3; i++) {
+    for (int j = 0; j < 7; j++) {
+      if (voltCounter >= 20) break;
 
-  for (int i = 0; i < 3; i++)
-  {
-    for (int j = 0; j < 7; j++)
-    {
-      FWo = voltageGridBox(FWo, j * (LCD_WIDTH / 7),
-                           i * (LCD_HEIGHT / 4) + (LCD_HEIGHT / 4),
-                           j * (LCD_WIDTH / 7) + (LCD_WIDTH / 7),
-                           i * (LCD_HEIGHT / 4) + 2 * (LCD_HEIGHT / 4),
-                           voltCounter, moduleData[modNum - 1][1][voltCounter],
-                           EVE_ENC_COLOR_RGB(0, 255, 0));
+      float value = Data::getCellVoltage(modNum - 1, voltCounter);
+      FWo = voltageGridBox(FWo,
+                          j * (LCD_WIDTH / 7),
+                          i * (LCD_HEIGHT / 4) + (LCD_HEIGHT / 4),
+                          j * (LCD_WIDTH / 7) + (LCD_WIDTH / 7),
+                          i * (LCD_HEIGHT / 4) + 2 * (LCD_HEIGHT / 4),
+                          voltCounter + 1,
+                          value,
+                          EVE_ENC_COLOR_RGB(0, 255, 0));
       voltCounter++;
     }
   }
 
+
   return (FWo);
 }
+
+// uint16_t voltageGradient(uint16_t FWo, int16_t x_point, int16_t y_point, int8_t num, int8_t modNum)
+// {
+//   FWo = header(FWo, x_point, y_point, false, "Mod. Volt");
+
+//   int voltCounter = 1;
+
+//   float voltages[3][7] = {
+//       {3.54, 1.56, 4.69, 2.98, 3.92, 2.11, 4.05},
+//       {1.91, 5.00, 2.38, 3.27, 4.31, 3.76, 2.84},
+//       {1.65, 4.36, 2.51, 3.80, 2.83, 4.12, 1.98}};
+
+//   for (int i = 0; i < 3; i++)
+//   {
+//     for (int j = 0; j < 7; j++)
+//     {
+//       FWo = voltageGridBox(FWo, j * (LCD_WIDTH / 7),
+//                            i * (LCD_HEIGHT / 4) + (LCD_HEIGHT / 4),
+//                            j * (LCD_WIDTH / 7) + (LCD_WIDTH / 7),
+//                            i * (LCD_HEIGHT / 4) + 2 * (LCD_HEIGHT / 4),
+//                            voltCounter, moduleData[modNum - 1][1][voltCounter],
+//                            EVE_ENC_COLOR_RGB(0, 255, 0));
+//       voltCounter++;
+//     }
+//   }
+
+//   return (FWo);
+// }
 
 uint16_t tempGridBox(uint16_t FWo, uint16_t x0, uint16_t y0, uint16_t x1, uint16_t y1, int8_t num, float value, uint32_t color)
 {
@@ -498,7 +558,8 @@ uint16_t header(uint16_t FWo, int16_t x_point, int16_t y_point, bool home, char 
   FWo = EVE_PrintF(FWo, LCD_WIDTH - 200, 40, 30, EVE_OPT_CENTER, "420V");
 
   // Current Reading
-  FWo = EVE_PrintF(FWo, LCD_WIDTH - 280, 40, 30, EVE_OPT_CENTER, "50A |");
+  float Max_Cell_Temp = Data::getMaxCellTemp();
+  FWo = EVE_Text(FWo,LCD_WIDTH - 280, 40, 30,EVE_OPT_CENTER,(char*)String(Max_Cell_Temp).c_str());
 
   // Settings button
   FWo = EVE_Cmd_Dat_0(FWo, EVE_ENC_COLOR_A(0xD1));
