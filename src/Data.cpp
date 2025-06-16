@@ -40,7 +40,7 @@ float Data::getCellVoltage(int module, int index)
 float Data::getMaxCellTemp() {
     float max_temp = -std::numeric_limits<float>::infinity();
     for (int mod = 0; mod < 5; ++mod) {
-        for (int i = 0; i < 21; ++i) {
+        for (int i = 0; i < 18; ++i) {
             float val = can_data.moduleData[mod][1][i];
             if (val > max_temp) max_temp = val;
         }
@@ -51,7 +51,7 @@ float Data::getMaxCellTemp() {
 float Data::getMinCellTemp() {
     float min_temp = std::numeric_limits<float>::infinity();
     for (int mod = 0; mod < 5; ++mod) {
-        for (int i = 0; i < 21; ++i) {
+        for (int i = 0; i < 18; ++i) {
             float val = can_data.moduleData[mod][1][i];
             if (val < min_temp) min_temp = val;
         }
@@ -62,7 +62,7 @@ float Data::getMinCellTemp() {
 float Data::getMaxCellVoltage() {
     float max_voltage = -std::numeric_limits<float>::infinity();
     for (int mod = 0; mod < 5; ++mod) {
-        for (int i = 0; i < 21; ++i) {
+        for (int i = 0; i < 20; ++i) {
             float val = can_data.moduleData[mod][0][i];
             if (val > max_voltage) max_voltage = val;
         }
@@ -73,10 +73,18 @@ float Data::getMaxCellVoltage() {
 float Data::getMinCellVoltage() {
     float min_voltage = std::numeric_limits<float>::infinity();
     for (int mod = 0; mod < 5; ++mod) {
-        for (int i = 0; i < 21; ++i) {
+        for (int i = 0; i < 20; ++i) {
             float val = can_data.moduleData[mod][0][i];
             if (val < min_voltage) min_voltage = val;
         }
     }
     return min_voltage;
+}
+
+int Data::getElconVoltage() {
+    return static_cast<int>(can_data.Elcon_Output_Voltage);
+}
+
+int Data::getElconCurrent() {
+    return static_cast<int>(can_data.Elcon_Output_Current);
 }

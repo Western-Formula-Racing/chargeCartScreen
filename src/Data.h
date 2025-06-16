@@ -18,6 +18,11 @@ public:
     int getPackStatusCode();
     static int getPackCurrent();
 
+    static int getElconVoltage();
+    static int getElconCurrent();
+
+
+
 };
 
 #endif

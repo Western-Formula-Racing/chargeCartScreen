@@ -155,13 +155,27 @@
 // #define SD_CS       ((gpio_num_t)10)
 // Debug LED, or used for scope trigger or precise timing
 #define DEBUG_LED (3)
+
+
+
 // For ESP32
-#define EVE_SCK ((gpio_num_t)18)    // SPI Clock
-#define EVE_MOSI ((gpio_num_t)11)   // SPI MOSI
-#define EVE_MISO ((gpio_num_t)13)   // SPI MISO
-#define EVE_CS_NOT ((gpio_num_t)15) // Chip Select
-#define EVE_INT ((gpio_num_t)16)    // Interrupt
-#define EVE_PD_NOT ((gpio_num_t)17) // Power Down (Reset)
+// #define EVE_SCK ((gpio_num_t)18)    // SPI Clock
+// #define EVE_MOSI ((gpio_num_t)11)   // SPI MOSI
+// #define EVE_MISO ((gpio_num_t)13)   // SPI MISO
+// #define EVE_CS_NOT ((gpio_num_t)15) // Chip Select
+// #define EVE_INT ((gpio_num_t)16)    // Interrupt
+// #define EVE_PD_NOT ((gpio_num_t)17) // Power Down (Reset)
+
+#define EVE_SCK     ((gpio_num_t)38) // SPI Clock
+#define EVE_MOSI    ((gpio_num_t)37) // SPI MOSI
+#define EVE_MISO    ((gpio_num_t)36) // SPI MISO
+#define EVE_CS_NOT  ((gpio_num_t)35) // Chip Select
+#define EVE_INT     ((gpio_num_t)0) // Interrupt
+#define EVE_PD_NOT  ((gpio_num_t)45) // Power Down (Reset)
+
+
+
+
 
 // Faster direct port access (specific to AVR)
 //  #define CLR_EVE_PD_NOT        (PORTB &= ~(0x01))

@@ -76,5 +76,20 @@ void parse_can_message(twai_message_t* message) {
 
             break;
         }   
+
+        // == 
+        case 0x98FF50E5: {  
+        {  
+            if (message->extd) 
+            {
+                    uint16_t raw_voltage = ((uint16_t)data[1] << 8) | data[0];
+                    uint16_t raw_current = ((uint16_t)data[3] << 8) | data[2];
+
+                    can_data.Elcon_Output_Voltage = raw_voltage * 0.1f;
+                    can_data.Elcon_Output_Current = raw_current * 0.1f;
+            }
+            break;
+        }
     }
+}
 }

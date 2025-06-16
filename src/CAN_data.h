@@ -11,6 +11,9 @@ typedef struct {
     float moduleData[5][2][20];
     float Pack_Current;
     int Pack_Status;
+    float Elcon_Output_Voltage;
+    float Elcon_Output_Current;
+
 } RawCanData;
 
 extern RawCanData can_data;

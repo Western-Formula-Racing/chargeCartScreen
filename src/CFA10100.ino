@@ -63,8 +63,8 @@ void setup()
   pinMode(DEBUG_LED, OUTPUT);
 
   // Initialize SPI
-  SPI.begin(18,13,11,15); // SCK, MISO, MOSI, CS
-  //SPI.begin(18, 13, 11, 15); // SCK, MISO, MOSI, CS
+  //SPI.begin(18,13,11,15); // SCK, MISO, MOSI, CS
+  SPI.begin(38, 36, 37, 35); 
 
   //Bump the clock to 8MHz. Appears to be the maximum.
   SPI.beginTransaction(SPISettings(8000000, MSBFIRST, SPI_MODE0));
@@ -356,28 +356,6 @@ uint16_t Button(uint16_t FWo, int16_t x0, int16_t y0, int16_t x1, int16_t y1, ch
   return (FWo);
 }
 
-// uint16_t temperatureGradient(uint16_t FWo, int16_t x_point, int16_t y_point, int8_t num, int8_t modNum)
-// {
-//   FWo = header(FWo, x_point, y_point, false, "Mod. Temp");
-
-//   int tempCounter = 1;
-
-//   for (int i = 0; i < 3; i++)
-//   {
-//     for (int j = 0; j < 7; j++)
-//     {
-//       FWo = tempGridBox(FWo, j * (LCD_WIDTH / 7),
-//                         i * (LCD_HEIGHT / 4) + (LCD_HEIGHT / 4),
-//                         j * (LCD_WIDTH / 7) + (LCD_WIDTH / 7),
-//                         i * (LCD_HEIGHT / 4) + 2 * (LCD_HEIGHT / 4),
-//                         tempCounter, moduleData[modNum - 1][0][tempCounter],
-//                         EVE_ENC_COLOR_RGB(255, 0, 0));
-//       tempCounter++;
-//     }
-//   }
-
-//   return (FWo);
-// }
 
 uint16_t temperatureGradient(uint16_t FWo, int16_t x_point, int16_t y_point, int8_t num, int8_t modNum)
 {
@@ -431,33 +409,6 @@ uint16_t voltageGradient(uint16_t FWo, int16_t x_point, int16_t y_point, int8_t 
   return (FWo);
 }
 
-// uint16_t voltageGradient(uint16_t FWo, int16_t x_point, int16_t y_point, int8_t num, int8_t modNum)
-// {
-//   FWo = header(FWo, x_point, y_point, false, "Mod. Volt");
-
-//   int voltCounter = 1;
-
-//   float voltages[3][7] = {
-//       {3.54, 1.56, 4.69, 2.98, 3.92, 2.11, 4.05},
-//       {1.91, 5.00, 2.38, 3.27, 4.31, 3.76, 2.84},
-//       {1.65, 4.36, 2.51, 3.80, 2.83, 4.12, 1.98}};
-
-//   for (int i = 0; i < 3; i++)
-//   {
-//     for (int j = 0; j < 7; j++)
-//     {
-//       FWo = voltageGridBox(FWo, j * (LCD_WIDTH / 7),
-//                            i * (LCD_HEIGHT / 4) + (LCD_HEIGHT / 4),
-//                            j * (LCD_WIDTH / 7) + (LCD_WIDTH / 7),
-//                            i * (LCD_HEIGHT / 4) + 2 * (LCD_HEIGHT / 4),
-//                            voltCounter, moduleData[modNum - 1][1][voltCounter],
-//                            EVE_ENC_COLOR_RGB(0, 255, 0));
-//       voltCounter++;
-//     }
-//   }
-
-//   return (FWo);
-// }
 
 uint16_t tempGridBox(uint16_t FWo, uint16_t x0, uint16_t y0, uint16_t x1, uint16_t y1, int8_t num, float value, uint32_t color)
 {
@@ -496,7 +447,7 @@ uint16_t voltageGridBox(uint16_t FWo, uint16_t x0, uint16_t y0, uint16_t x1, uin
 
   // Map temperature [TEMP_MIN, TEMP_MAX] to [0, 255] opacity
   uint8_t opacity = static_cast<uint8_t>(((value - TEMP_MIN) / (TEMP_MAX - TEMP_MIN)) * 255.0f);
-  int intValue = static_cast<int>(value * 10);
+  //int intValue = static_cast<int>(value * 10);
 
   // Fill
   FWo = EVE_Cmd_Dat_0(FWo, EVE_ENC_COLOR_A(opacity)); // Set opacity
@@ -508,7 +459,7 @@ uint16_t voltageGridBox(uint16_t FWo, uint16_t x0, uint16_t y0, uint16_t x1, uin
   FWo = EVE_Cmd_Dat_0(FWo, EVE_ENC_COLOR_RGB(0, 0, 0));
   FWo = EVE_PrintF(FWo, x0 + 15, y0 + 15, 18, EVE_OPT_CENTER, "%d", num);
 
-  FWo = EVE_PrintF(FWo, x0 + ((x1 - x0) / 2), y0 + ((y1 - y0) / 2), 25, EVE_OPT_CENTER, "%d.%d", intValue / 10, intValue % 10);
+  FWo = EVE_PrintF(FWo, x0 + ((x1 - x0) / 2), y0 + ((y1 - y0) / 2), 25, EVE_OPT_CENTER, "%.4f", value);
 
   return (FWo);
 }
@@ -550,20 +501,55 @@ uint16_t header(uint16_t FWo, int16_t x_point, int16_t y_point, bool home, char 
   FWo = EVE_Cmd_Dat_0(FWo, EVE_ENC_COLOR_RGB(0, 0, 0));
   FWo = Button(FWo, 15, 15, 65, 60, "<", x_point, y_point, EVE_ENC_COLOR_RGB(0, 0, 0), decrementScreen, 1);
 
-  FWo = EVE_PrintF(FWo, 200, 40, 30, EVE_OPT_CENTER, "Module %d %s", (screen / 2) + 1, temp);
-
   FWo = Button(FWo, (LCD_WIDTH / 2) - 50, 15, (LCD_WIDTH / 2), 60, ">", x_point, y_point, EVE_ENC_COLOR_RGB(0, 0, 0), incrementScreen, 1);
 
   // Voltage Reading
-  FWo = EVE_PrintF(FWo, LCD_WIDTH - 200, 40, 30, EVE_OPT_CENTER, "420V");
+  //FWo = EVE_PrintF(FWo, LCD_WIDTH - 200, 40, 30, EVE_OPT_CENTER, "420V");
+  const char* pack_state = Data::getPackStatus();
 
-  // Current Reading
+  // Set color based on status
+  if (strcmp(pack_state, "CHARGING") == 0) {
+      FWo = EVE_Cmd_Dat_0(FWo, EVE_ENC_COLOR_RGB(0, 255, 0)); // green
+  } else {
+      FWo = EVE_Cmd_Dat_0(FWo, EVE_ENC_COLOR_RGB(0, 0, 0)); // black
+  }
+  
+  FWo = EVE_PrintF(FWo, 200, 40, 30, EVE_OPT_CENTER, "Module %d %s", (screen / 2) + 1, temp);
+
+  //FWo = EVE_Text(FWo, 200, 90, 30, EVE_OPT_CENTER, const_cast<char*>(pack_state));
+
+  FWo = EVE_Cmd_Dat_0(FWo, EVE_ENC_COLOR_RGB(0, 0, 0)); // black
+  
+  //MAX MIN Labels
+  FWo = EVE_Text(FWo,LCD_WIDTH - 300, 20, 30,EVE_OPT_CENTER,"MAX");
+  FWo = EVE_Text(FWo,LCD_WIDTH - 300, 60, 30,EVE_OPT_CENTER,"MIN");
+  FWo = EVE_Text(FWo,20, 70, 30,NULL,"CURR");
+  FWo = EVE_Text(FWo,240, 70, 30,NULL,"VOLT");
+
+
+  // Temp Reading
   float Max_Cell_Temp = Data::getMaxCellTemp();
-  FWo = EVE_Text(FWo,LCD_WIDTH - 280, 40, 30,EVE_OPT_CENTER,(char*)String(Max_Cell_Temp).c_str());
+  FWo = EVE_Text(FWo,LCD_WIDTH - 210, 20, 30,EVE_OPT_CENTER,(char*)String(Max_Cell_Temp).c_str());
+
+  float Min_Cell_Temp = Data::getMinCellTemp();
+  FWo = EVE_Text(FWo,LCD_WIDTH - 210, 60, 30,EVE_OPT_CENTER,(char*)String(Min_Cell_Temp).c_str());
+
+  // Temp Reading
+  float Max_Cell_Volt = Data::getMaxCellVoltage();
+  FWo = EVE_Text(FWo, LCD_WIDTH - 90, 20, 30, EVE_OPT_CENTER, (char*)String(Max_Cell_Volt, 4).c_str());
+
+  float Min_Cell_Volt = Data::getMinCellVoltage();
+  FWo = EVE_Text(FWo, LCD_WIDTH - 90, 60, 30, EVE_OPT_CENTER, (char*)String(Min_Cell_Volt, 4).c_str());
+
+  float Charging_Curr = Data::getElconCurrent();
+  FWo = EVE_Text(FWo, 120, 70, 30, NULL, (char*)String(Charging_Curr, 4).c_str());
+
+  float Charging_Volt = Data::getElconVoltage();
+  FWo = EVE_Text(FWo, 330, 70, 30, NULL, (char*)String(Charging_Volt, 4).c_str());
 
   // Settings button
   FWo = EVE_Cmd_Dat_0(FWo, EVE_ENC_COLOR_A(0xD1));
-  FWo = Button(FWo, LCD_WIDTH - 140, 15, LCD_WIDTH - 15, 60, "0 Errors", x_point, y_point, EVE_ENC_COLOR_RGB(0, 0, 0), incrementScreen, 10);
+  //FWo = Button(FWo, LCD_WIDTH - 140, 15, LCD_WIDTH - 15, 60, "0 Errors", x_point, y_point, EVE_ENC_COLOR_RGB(0, 0, 0), incrementScreen, 10);
   FWo = EVE_Cmd_Dat_0(FWo, EVE_ENC_COLOR_A(0xFF));
 
   return (FWo);
